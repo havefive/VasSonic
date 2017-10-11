@@ -47,6 +47,18 @@ static NSLock *sonicRequestClassLock;
 @property (nonatomic,retain)NSMutableURLRequest *request;
 @property (nonatomic,assign)BOOL didFinishCacheRead;
 
+/**
+ * Use to hold all block operation in sonic session queue
+ * We need to cancel before the SonicSession dealloc
+ */
+@property (nonatomic,retain)NSMutableArray *sonicQueueOperationIdentifiers;
+
+/**
+ * Use to hold all block operation in main queue
+ * We need to cancel before the SonicSession dealloc
+ */
+@property (nonatomic,retain)NSMutableArray *mainQueueOperationIdentifiers;
+
 @end
 
 @implementation SonicSession
@@ -121,7 +133,9 @@ static NSLock *sonicRequestClassLock;
         self.url = aUrl;
         self.request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:self.url]];
         _sessionID = [sonicSessionID(aUrl) copy];
-
+        self.sonicQueueOperationIdentifiers = [NSMutableArray array];
+        self.mainQueueOperationIdentifiers = [NSMutableArray array];
+        
         [self setupData];
     }
     return self;
@@ -168,11 +182,14 @@ static NSLock *sonicRequestClassLock;
     self.url = nil;
     [_sessionID release];
     _sessionID = nil;
-
+    
     self.response = nil;
     self.responseData = nil;
     self.error = nil;
 
+    self.sonicQueueOperationIdentifiers = nil;
+    self.mainQueueOperationIdentifiers = nil;
+    
     [super dealloc];
 }
 
@@ -180,18 +197,44 @@ static NSLock *sonicRequestClassLock;
 
 - (void)start
 {
-    dispatchToMain(^{
+    NSString *opIdentifier =  dispatchToMain(^{
         if (self.delegate && [self.delegate respondsToSelector:@selector(sessionWillRequest:)]) {
             [self.delegate sessionWillRequest:self];
         }
         [self syncCookies];
+        [self requestStartInOperation];
     });
-
-    [self requestStartInOperation];
+    [self.mainQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (void)cancel
 {
+    self.delegate = nil;
+
+    //remove operation relation this session in SonicSessionQueue and mainQueue
+    NSMutableArray *opNeedCancel = [NSMutableArray array];
+    for (NSString *opIdentifier in self.mainQueueOperationIdentifiers) {
+        for (NSOperation *op in [NSOperationQueue mainQueue].operations) {
+            if (op.hash == [opIdentifier integerValue]) {
+                [opNeedCancel addObject:op];
+            }
+        }
+    }
+    
+    //cancel operation from sonic session queue
+    for (NSString *opIdentifier in self.sonicQueueOperationIdentifiers) {
+        for (NSOperation *op in [SonicSession sonicSessionQueue].operations) {
+            if (op.hash == [opIdentifier integerValue]) {
+                [opNeedCancel addObject:op];
+            }
+        }
+    }
+    
+    //cancel op now
+    [opNeedCancel enumerateObjectsUsingBlock:^(NSOperation *op, NSUInteger idx, BOOL * _Nonnull stop) {
+        [op cancel];
+    }];
+    
     if (self.mCustomConnection) {
         [self.mCustomConnection stopLoading];
     }
@@ -317,15 +360,11 @@ static NSLock *sonicRequestClassLock;
 
 #pragma mark - Sonic Session Protocol
 
-void dispatchToSonicSessionQueue(dispatch_block_t block)
+NSString * dispatchToSonicSessionQueue(dispatch_block_t block)
 {
-    NSThread *currentThread = [NSThread currentThread];
-    if([currentThread.name isEqualToString:[SonicSession sonicSessionQueue].name]){
-        block();
-    }else{
-        NSBlockOperation *blkOp = [NSBlockOperation blockOperationWithBlock:block];
-        [[SonicSession sonicSessionQueue] addOperation:blkOp];
-    }
+    NSBlockOperation *blkOp = [NSBlockOperation blockOperationWithBlock:block];
+    [[SonicSession sonicSessionQueue] addOperation:blkOp];
+    return [NSString stringWithFormat:@"%ld",(unsigned long)blkOp.hash];
 }
 
 - (void)session:(SonicSession *)session didRecieveResponse:(NSHTTPURLResponse *)response
@@ -339,7 +378,8 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
             [self firstLoadRecieveResponse:response];
         }
     };
-    dispatchToSonicSessionQueue(opBlock);
+    NSString *opIdentifier = dispatchToSonicSessionQueue(opBlock);
+    [self.sonicQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (void)session:(SonicSession *)session didLoadData:(NSData *)data
@@ -362,7 +402,8 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
         }
         
     };
-    dispatchToSonicSessionQueue(opBlock);
+    NSString *opIdentifier = dispatchToSonicSessionQueue(opBlock);
+    [self.sonicQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (void)session:(SonicSession *)session didFaild:(NSError *)error
@@ -381,12 +422,17 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
         }else{
             if (self.isFirstLoad) {
                 [self firstLoadDidFaild:error];
+                //If 302 error in first request,make the webview reload in normal request
+                if (error.code == 302) {
+                    [self webViewRequireloadNormalRequest];
+                }
             }else{
                 [self updateDidFaild];
             }
         }
     };
-    dispatchToSonicSessionQueue(opBlock);
+    NSString *opIdentifier = dispatchToSonicSessionQueue(opBlock);
+    [self.sonicQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (void)sessionDidFinish:(SonicSession *)session
@@ -402,7 +448,8 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
         }
         
     };
-    dispatchToSonicSessionQueue(opBlock);
+    NSString *opIdentifier = dispatchToSonicSessionQueue(opBlock);
+    [self.sonicQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 #pragma mark - 首次加载
@@ -543,7 +590,8 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
         }
         
     };
-    dispatchToSonicSessionQueue(opBlock);
+    NSString *opIdentifier = dispatchToSonicSessionQueue(opBlock);
+    [self.sonicQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (NSArray *)preloadRequestActions
@@ -617,7 +665,8 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
         }
         
     };
-    dispatchToSonicSessionQueue(opBlock);
+    NSString *opIdentifier = dispatchToSonicSessionQueue(opBlock);
+    [self.sonicQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (NSDictionary *)sonicDiffResult
@@ -743,7 +792,7 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
             return;
         }
         
-        dispatchToMain(^{
+       NSString *opIdentifier = dispatchToMain(^{
             
             NSString *policy = [self responseHeaderValueByIgnoreCaseKey:SonicHeaderKeyCacheOffline];
             
@@ -755,6 +804,8 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
             }
             
         });
+        [self.mainQueueOperationIdentifiers addObject:opIdentifier];
+        
     }
 }
 
@@ -789,23 +840,25 @@ void dispatchToSonicSessionQueue(dispatch_block_t block)
 
 - (void)checkAutoCompletionAction
 {
-    dispatchToMain(^{
+   NSString *opIdentifier = dispatchToMain(^{
         if (!self.delegate) {
             if (self.completionCallback) {
                 self.completionCallback(self.sessionID);
             }
         }
     });
+    [self.mainQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (void)webViewRequireloadNormalRequest
 {
-    dispatchToMain(^{
+   NSString *opIdentifier = dispatchToMain(^{
         if (self.delegate || [self.delegate respondsToSelector:@selector(session:requireWebViewReload:)]) {
             NSURLRequest *normalRequest = [NSURLRequest requestWithURL:[NSURL URLWithString:self.url]];
             [self.delegate session:self requireWebViewReload:normalRequest];
         }
     });
+    [self.mainQueueOperationIdentifiers addObject:opIdentifier];
 }
 
 - (BOOL)isSonicResponse

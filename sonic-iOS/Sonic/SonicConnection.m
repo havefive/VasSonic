@@ -47,10 +47,6 @@
 
 - (void)dealloc
 {
-    if (self.session) {
-        self.session = nil;
-    }
-    
     [self stopLoading];
     
     [_request release];
@@ -76,6 +72,9 @@
 
 - (void)stopLoading
 {
+    //we must set session nil
+    self.session = nil;
+    
     if (self.dataTask && self.dataTask.state == NSURLSessionTaskStateRunning) {
         [self.dataTask cancel];
         [self.dataSession finishTasksAndInvalidate];
@@ -84,10 +83,19 @@
     }
 }
 
+- (BOOL)validateSessionState
+{
+    return [self.session conformsToProtocol:@protocol(SonicSessionProtocol)] && self.session;
+}
+
 #pragma mark - NSURLSessionDelegate
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error
 {
+    if (![self validateSessionState]) {
+        return;
+    }
+    
     if (error) {
         [self.session session:self.session didFaild:error];
     }else{
@@ -127,22 +135,42 @@ didReceiveResponse:(NSURLResponse *)response
  completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler
 {
     completionHandler(NSURLSessionResponseAllow);
+    
+    if (![self validateSessionState]) {
+        return;
+    }
+    
     [self.session session:self.session didRecieveResponse:(NSHTTPURLResponse *)response];
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request completionHandler:(void (^)(NSURLRequest * _Nullable))completionHandler
 {
-    completionHandler(request);
+    completionHandler(nil);
+    
+    //Sonic didn't support 302 request
+    if (![self validateSessionState]) {
+        return;
+    }
+    
+    NSError *redirectErr = [NSError errorWithDomain:@"com.sonic.connection" code:302 userInfo:@{@"msg":@"sonic can't make 302 jump"}];
+    [self.session session:self.session didFaild:redirectErr];
 }
 
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask
     didReceiveData:(NSData *)data
 {
+    if (![self validateSessionState]) {
+        return;
+    }
     [self.session session:self.session didLoadData:data];
 }
 
 - (void)URLSession:(NSURLSession *)session didBecomeInvalidWithError:(nullable NSError *)error
 {
+    if (![self validateSessionState]) {
+        return;
+    }
+    
     if (error) {
         [self.session session:self.session didFaild:error];
     }
