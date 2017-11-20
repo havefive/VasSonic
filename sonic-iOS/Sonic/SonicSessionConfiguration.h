@@ -1,5 +1,5 @@
 //
-//  SonicUitil.h
+//  SonicSessionConfiguration.h
 //  sonic
 //
 //  Tencent is pleased to support the open source community by making VasSonic available.
@@ -18,35 +18,27 @@
 //
 
 #import <Foundation/Foundation.h>
-#import "SonicConnection.h"
-#import "SonicConstants.h"
 
-@interface SonicUitil : NSObject
+@interface SonicSessionConfiguration : NSObject
 
 /**
- * Set sonic tag header into originRequest headers
+ * Pass custom request headers
  */
-NSURLRequest *sonicWebRequest(NSURLRequest *originRequest);
+@property (nonatomic,retain)NSDictionary *customRequestHeaders;
 
 /**
- * Using MD5 to encode the URL to session ID;
+ * Pass custom response headers
  */
-NSString *sonicSessionID(NSString *url);
+@property (nonatomic,retain)NSDictionary *customResponseHeaders;
 
 /**
- * Create sonic path with URL
+ * Support Cache-Control or not
  */
-NSString *sonicUrl(NSString *url);
+@property (nonatomic,assign)BOOL supportCacheControl;
 
 /**
- * Dispatch block to main thread.
- * Return block operation hash string
+ * Enable Local-Server mode which will simulate response as a standar sonic server.
  */
-NSString * dispatchToMain (dispatch_block_t block);
-
-/**
- * Get SHA1 value from data.
- */
-NSString * getDataSha1(NSData *data);
+@property (nonatomic,assign)BOOL enableLocalServer;
 
 @end

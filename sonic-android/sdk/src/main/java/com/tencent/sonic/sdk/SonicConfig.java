@@ -30,10 +30,30 @@ public class SonicConfig {
     long SONIC_UNAVAILABLE_TIME = 6 * 60 * 60 * 1000;
 
     /**
+     * The max size of sonic cache, default is 30M.
+     */
+    long SONIC_CACHE_MAX_SIZE = 30 * 1024 * 1024;
+
+    /**
+     * The time interval between check sonic cache, default is 24 hours.
+     */
+    long SONIC_CACHE_CHECK_TIME_INTERVAL = 24 * 60 * 60 * 1000L;
+
+    /**
+     * The max age of sonic cache before expired.
+     */
+    int SONIC_CACHE_MAX_AGE = 5 * 60 * 1000;
+
+    /**
      * Whether verify file by compare SHA1. If this value is false, sonic will verify file by file's size.
      * Verify the file size is less time consuming than checking SHA1.
      */
     boolean VERIFY_CACHE_FILE_WITH_SHA1 = true;
+
+    /**
+     * Whether auto call init db when create sonicEngine or not, default is true.
+     */
+    boolean AUTO_INIT_DB_WHEN_CREATE = true;
 
     /**
      * There will be a deadlock when ShouldInterceptRequest and getCookie are running at the same thread.
@@ -73,8 +93,28 @@ public class SonicConfig {
             return this;
         }
 
+        public Builder setCacheMaxSize(long maxSize) {
+            target.SONIC_CACHE_MAX_SIZE = maxSize;
+            return this;
+        }
+
+        public Builder setCacheCheckTimeInterval(long time) {
+            target.SONIC_CACHE_CHECK_TIME_INTERVAL = time;
+            return this;
+        }
+
+        public Builder setAutoInitDBWhenCreate(boolean autoInitDBWhenCreate) {
+            target.AUTO_INIT_DB_WHEN_CREATE = autoInitDBWhenCreate;
+            return this;
+        }
+
         public Builder setGetCookieWhenSessionCreate(boolean value) {
             target.GET_COOKIE_WHEN_SESSION_CREATE = value;
+            return this;
+        }
+
+        public Builder setSonicCacheMaxAge(int maxAge) {
+            target.SONIC_CACHE_MAX_AGE = maxAge;
             return this;
         }
 

@@ -1,5 +1,5 @@
 //
-//  SonicClient.h
+//  SonicEngine.h
 //  sonic
 //
 //  Tencent is pleased to support the open source community by making VasSonic available.
@@ -20,28 +20,38 @@
 #import <Foundation/Foundation.h>
 #import "SonicSession.h"
 #import "SonicConstants.h"
+#import "SonicSessionConfiguration.h"
+#import "SonicConfiguration.h"
 
 /**
  * Manage all sonic sessions.
  */
-@interface SonicClient : NSObject
+@interface SonicEngine : NSObject
 
 /* Return the unique identifier for current user */
-@property (nonatomic,readonly)NSString *currentUserUniq;
+@property (nonatomic,readonly)NSString *currentUserAccount;
 
 /* Return the global custom User-Agent */
 @property (nonatomic,readonly)NSString *userAgent;
 
+/* Return the configuration */
+@property (nonatomic,readonly)SonicConfiguration *configuration;
+
 /* Share the instance */
-+ (SonicClient *)sharedClient;
++ (SonicEngine *)sharedEngine;
+
+/**
+ * Client must run with the configuration,default use [SonicConfiguration defaultConfiguration]
+ */
+- (void)runWithConfiguration:(SonicConfiguration *)aConfiguration;
 
 /**
  * Set an unique identifier for the user.
  * We can use the identifier to create different cache dir for different users.
  
- * @param userIdentifier the unique identifier for the special user
+ * @param userAccount the unique identifier for the special user
  */
-- (void)setCurrentUserUniqIdentifier:(NSString *)userIdentifier;
+- (void)setCurrentUserAccount:(NSString *)userAccount;
 
 /**
  * @brief Clear all session memory and file caches.
@@ -67,11 +77,6 @@
 - (void)addDomain:(NSString *)domain withIpAddress:(NSString *)ipAddress;
 
 /**
- * Return the default user-agent used by sonic.
- */
-- (NSString *)sonicDefaultUserAgent;
-
-/**
  * Set global custom User-Agent.
  
  * @param aUserAgent the custom User-Agent
@@ -79,9 +84,23 @@
 - (void)setGlobalUserAgent:(NSString *)aUserAgent;
 
 /**
+ * Get global custom User-Agent.
+ 
+ * return the custom User-Agent
+ */
+- (NSString *)getGlobalUserAgent;
+
+/**
  * Get the last update timestamp of this URL.
  */
 - (NSString *)localRefreshTimeByUrl:(NSString *)url;
+
+/**
+ * Create a sonic session with URL.
+ * All the same URLs share one single session. Duplicate calls will not create duplicate sessions.
+ * use configuration to add custom request headers or custom response headers
+ */
+- (void)createSessionWithUrl:(NSString *)url withWebDelegate:(id<SonicSessionDelegate>)aWebDelegate withConfiguration:(SonicSessionConfiguration *)configuration;
 
 /**
  * Create a sonic session with URL.
@@ -95,9 +114,19 @@
 - (void)removeSessionWithWebDelegate:(id<SonicSessionDelegate>)aWebDelegate;
 
 /**
+ * Find session by sessionId
+ */
+- (SonicSession *)sessionById:(NSString *)sessionId;
+
+/**
  * Find the session with webDelegate.
  */
 - (SonicSession *)sessionWithWebDelegate:(id<SonicSessionDelegate>)aWebDelegate;
+
+/**
+ * Find the session with webDelegateId.
+ */
+- (SonicSession *)sessionWithDelegateId:(NSString *)delegateId;
 
 /**
  * Get the patch between local data and server data.
