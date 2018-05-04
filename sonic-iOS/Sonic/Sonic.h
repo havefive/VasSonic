@@ -40,3 +40,4 @@ FOUNDATION_EXPORT const unsigned char SonicVersionString[];
 #import "SonicURLProtocol.h"
 #import "SonicCache.h"
 #import "SonicCacheItem.h"
+#import "SonicEventStatistics.h"

@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.tencent.sonic.sdk.SonicSession.OFFLINE_MODE_HTTP;
@@ -246,7 +247,7 @@ public class SonicServer implements SonicSessionStream.Callback {
     public  Map<String, List<String>> getResponseHeaderFields() {
         if (null == cachedResponseHeaders) {
             // new cachedResponseHeaders
-            cachedResponseHeaders = new HashMap<String, List<String>>();
+            cachedResponseHeaders = new ConcurrentHashMap<String, List<String>>();
             // fill custom headers
             List<String> tmpHeaderList;
             if (session.config.customResponseHeaders != null && session.config.customResponseHeaders.size() > 0) {
@@ -271,8 +272,6 @@ public class SonicServer implements SonicSessionStream.Callback {
                     String key = entry.getKey();
                     if (!TextUtils.isEmpty(key)) {
                         cachedResponseHeaders.put(key.toLowerCase(), entry.getValue());
-                    } else {
-                        cachedResponseHeaders.put(key, entry.getValue());
                     }
                 }
             }
@@ -409,7 +408,7 @@ public class SonicServer implements SonicSessionStream.Callback {
         return true;
     }
 
-    private void separateTemplateAndData() {
+    protected void separateTemplateAndData() {
         if (!TextUtils.isEmpty(serverRsp)) {
             StringBuilder templateStringBuilder = new StringBuilder();
             StringBuilder dataStringBuilder = new StringBuilder();
@@ -421,10 +420,11 @@ public class SonicServer implements SonicSessionStream.Callback {
 
             String eTag = getResponseHeaderField(CUSTOM_HEAD_FILED_ETAG);
             String templateTag = getResponseHeaderField(CUSTOM_HEAD_FILED_TEMPLATE_TAG);
+            String newHtmlSha1 = null;
             if (TextUtils.isEmpty(eTag)) { // When eTag is empty, fill eTag with Sha1
-                eTag = SonicUtils.getSHA1(serverRsp);
+                newHtmlSha1 = eTag = SonicUtils.getSHA1(serverRsp);
                 addResponseHeaderFields(CUSTOM_HEAD_FILED_ETAG, eTag);
-                addResponseHeaderFields(CUSTOM_HEAD_FILED_HTML_SHA1, eTag);
+                addResponseHeaderFields(CUSTOM_HEAD_FILED_HTML_SHA1, newHtmlSha1);
             }
 
             if (TextUtils.isEmpty(templateString)) { // The same with htmlString
@@ -438,6 +438,10 @@ public class SonicServer implements SonicSessionStream.Callback {
                 try {
                     JSONObject object = new JSONObject();
                     object.put("data", new JSONObject(data));
+                    if (TextUtils.isEmpty(newHtmlSha1)) {
+                        newHtmlSha1 = SonicUtils.getSHA1(serverRsp);
+                        addResponseHeaderFields(CUSTOM_HEAD_FILED_HTML_SHA1, newHtmlSha1);
+                    }
                     object.put("html-sha1", getResponseHeaderField(CUSTOM_HEAD_FILED_HTML_SHA1));
                     object.put("template-tag", getResponseHeaderField(CUSTOM_HEAD_FILED_TEMPLATE_TAG));
                     dataString = object.toString();
@@ -458,7 +462,7 @@ public class SonicServer implements SonicSessionStream.Callback {
                 SonicUtils.log(TAG, Log.ERROR, "session(" + session.sId + "), onClose error:" + e.getMessage() + ".");
             }
         }
-        session.onServerClosed(readComplete);
+        session.onServerClosed(this, readComplete);
     }
 
 }

@@ -25,6 +25,7 @@ import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
@@ -141,6 +142,11 @@ public abstract class SonicSessionConnection {
     public final static String HTTP_HEAD_FIELD_CONTENT_TYPE = "Content-Type";
 
     /**
+     * HTTP Header : Content-Length. <br>
+     */
+    public final static String HTTP_HEAD_FIELD_CONTENT_LENGTH = "Content-Length";
+
+    /**
      * HTTP Request Header : Cookie. <br>
      */
     public final static String HTTP_HEAD_FIELD_COOKIE = "Cookie";
@@ -149,6 +155,13 @@ public abstract class SonicSessionConnection {
      * HTTP Request Header：User-Agent. <br>
      */
     public final static String HTTP_HEAD_FILED_USER_AGENT = "User-Agent";
+
+    public final static String HTTP_HEAD_FILED_IF_NOT_MATCH = "If-None-Match";
+
+    /**
+     * HTTP Response Header: Link. <br>
+     */
+    public final static String CUSTOM_HEAD_FILED_LINK = "sonic-link";
 
     /**
      * SonicSession Object used by SonicSessionConnection.
@@ -316,7 +329,7 @@ public abstract class SonicSessionConnection {
 
                 String eTag = intent.getStringExtra(CUSTOM_HEAD_FILED_ETAG);
                 if (null == eTag) eTag = "";
-                connection.setRequestProperty("If-None-Match", eTag);
+                connection.setRequestProperty(HTTP_HEAD_FILED_IF_NOT_MATCH, eTag);
 
                 String templateTag = intent.getStringExtra(CUSTOM_HEAD_FILED_TEMPLATE_TAG);
                 if (null == templateTag) templateTag = "";
@@ -456,7 +469,12 @@ public abstract class SonicSessionConnection {
                 return null;
             }
 
-            return connectionImpl.getHeaderFields();
+            try {
+                return connectionImpl.getHeaderFields();
+            } catch (Throwable e) {
+                SonicUtils.log(TAG, Log.ERROR, "getHeaderFields error:" + e.getMessage());
+                return new HashMap<String, List<String>>();
+            }
         }
 
         @Override
